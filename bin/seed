@@ -1,0 +1,248 @@
+#!/usr/bin/env node
+
+/**
+ * Database Seeding Script
+ *
+ * Seeds the database with initial data for:
+ * - Transaction types (PAYMENT, TOPUP)
+ * - Services (12 Indonesian services)
+ * - Banners (6 promotional banners)
+ */
+
+import dotenv from 'dotenv';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { count } from 'drizzle-orm';
+import readline from 'readline';
+import logger from '#lib/util/logger.js';
+import { transactionTypeEnum } from '#lib/model/transaction_type_enum.js';
+import { services } from '#lib/model/services.js';
+import { banners } from '#lib/model/banners.js';
+
+// Load environment variables
+dotenv.config();
+
+/**
+ * Seed Data Definitions
+ */
+
+const transactionTypes = [
+  { transactionType: 'PAYMENT' },
+  { transactionType: 'TOPUP' }
+];
+
+const servicesData = [
+  {
+    code: 'PAJAK',
+    name: 'Pajak PBB',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 40000
+  },
+  {
+    code: 'PLN',
+    name: 'Listrik',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 10000
+  },
+  {
+    code: 'PDAM',
+    name: 'PDAM Berlangganan',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 40000
+  },
+  {
+    code: 'PULSA',
+    name: 'Pulsa',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 40000
+  },
+  {
+    code: 'PGN',
+    name: 'PGN Berlangganan',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 50000
+  },
+  {
+    code: 'MUSIK',
+    name: 'Musik Berlangganan',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 50000
+  },
+  {
+    code: 'TV',
+    name: 'TV Berlangganan',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 50000
+  },
+  {
+    code: 'PAKET_DATA',
+    name: 'Paket data',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 50000
+  },
+  {
+    code: 'VOUCHER_GAME',
+    name: 'Voucher Game',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 100000
+  },
+  {
+    code: 'VOUCHER_MAKANAN',
+    name: 'Voucher Makanan',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 100000
+  },
+  {
+    code: 'QURBAN',
+    name: 'Qurban',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 200000
+  },
+  {
+    code: 'ZAKAT',
+    name: 'Zakat',
+    iconUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    tariff: 300000
+  }
+];
+
+const bannersData = [
+  {
+    name: 'Promo Diskon Listrik',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Dapatkan diskon hingga 20% untuk pembayaran listrik bulan ini'
+  },
+  {
+    name: 'Cashback Pulsa',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Beli pulsa sekarang dan dapatkan cashback langsung ke saldo Anda'
+  },
+  {
+    name: 'Gratis Biaya Admin',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Bayar tagihan PDAM tanpa biaya admin untuk pengguna baru'
+  },
+  {
+    name: 'Promo Voucher Game',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Beli voucher game favorit dengan harga spesial'
+  },
+  {
+    name: 'Bundle Hemat',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Paket bundling TV dan Musik berlangganan dengan harga terjangkau'
+  },
+  {
+    name: 'Ramadan Berkah',
+    imageUrl: 'https://nutech-integrasi.app/dummy.jpg',
+    description: 'Mudahkan ibadah dengan layanan Zakat dan Qurban online'
+  }
+];
+
+/**
+ * Ask user for confirmation
+ */
+function askConfirmation(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+  });
+}
+
+/**
+ * Check if database has been seeded
+ */
+async function checkIfSeeded(db) {
+  try {
+    const [transactionTypeCount] = await db.select({ count: count() }).from(transactionTypeEnum);
+    const [servicesCount] = await db.select({ count: count() }).from(services);
+    const [bannersCount] = await db.select({ count: count() }).from(banners);
+
+    return {
+      isSeeded: transactionTypeCount.count > 0 || servicesCount.count > 0 || bannersCount.count > 0,
+      counts: {
+        transactionTypes: transactionTypeCount.count,
+        services: servicesCount.count,
+        banners: bannersCount.count
+      }
+    };
+  } catch (error) {
+    logger.error('Error checking seed status', { error: error.message });
+    return { isSeeded: false, counts: {} };
+  }
+}
+
+/**
+ * Main seeding function
+ */
+async function seed() {
+  let db;
+
+  try {
+    logger.info('Starting database seeding...');
+
+    // Initialize database connection
+    db = drizzle({
+      connection: {
+        connectionString: process.env.DATABASE_URL,
+      }
+    });
+
+    // Check if database is already seeded
+    const { isSeeded, counts } = await checkIfSeeded(db);
+
+    if (isSeeded) {
+      console.log('\n⚠️  Database has already been seeded!');
+      console.log('\nCurrent data:');
+      console.log(`  - Transaction Types: ${counts.transactionTypes}`);
+      console.log(`  - Services: ${counts.services}`);
+      console.log(`  - Banners: ${counts.banners}`);
+      console.log('\nNote: Seeding again will skip duplicate entries (based on unique constraints).\n');
+
+      const proceed = await askConfirmation('Do you want to proceed with seeding? (y/n): ');
+
+      if (!proceed) {
+        logger.info('Seeding cancelled by user');
+        console.log('\n❌ Seeding cancelled');
+        process.exit(0);
+      }
+    }
+
+    // Seed Transaction Types
+    logger.info('Seeding transaction types...');
+    await db.insert(transactionTypeEnum).values(transactionTypes).onConflictDoNothing();
+    logger.info(`✓ Seeded ${transactionTypes.length} transaction types`);
+
+    // Seed Services
+    logger.info('Seeding services...');
+    await db.insert(services).values(servicesData).onConflictDoNothing();
+    logger.info(`✓ Seeded ${servicesData.length} services`);
+
+    // Seed Banners
+    logger.info('Seeding banners...');
+    await db.insert(banners).values(bannersData).onConflictDoNothing();
+    logger.info(`✓ Seeded ${bannersData.length} banners`);
+
+    logger.info('✅ Database seeding completed successfully!');
+    process.exit(0);
+
+  } catch (error) {
+    logger.error('❌ Database seeding failed', {
+      error: {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      }
+    });
+    process.exit(1);
+  }
+}
+
+// Run the seeding
+seed();

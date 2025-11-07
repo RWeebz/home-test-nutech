@@ -1,0 +1,27 @@
+# IDE
+.idea
+.vscode
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+.*.env
+.env.*
+
+# Exception: keep example env files
+!.env.example
+!*.example.env
+!*.env.*.example
+
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project documentation
+CLAUDE.md

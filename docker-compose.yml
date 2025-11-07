@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: nutech-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: ${DOCKER_POSTGRES_DB}
+      POSTGRES_USER: ${DOCKER_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DOCKER_POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DOCKER_POSTGRES_USER} -d ${DOCKER_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nutech-network
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nutech-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    environment:
+      PORT: ${APP_PORT}
+      HOST: ${APP_HOST}
+      LOG_LEVEL: ${APP_LOG_LEVEL}
+      JWT_SECRET: ${APP_JWT_SECRET}
+      BCRYPT_SALT_ROUNDS: ${APP_BCRYPT_SALT_ROUNDS}
+      S3_REGION: ${APP_S3_REGION}
+      S3_ACCESS_KEY_ID: ${APP_S3_ACCESS_KEY_ID}
+      S3_SECRET_KEY: ${APP_S3_SECRET_KEY}
+      S3_URL_API: ${APP_S3_URL_API}
+      S3_BUCKET_NAME: ${APP_S3_BUCKET_NAME}
+      BASE_URL: ${APP_BASE_URL}
+      DATABASE_URL: ${APP_DATABASE_URL}
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nutech-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  nutech-network:
+    driver: bridge

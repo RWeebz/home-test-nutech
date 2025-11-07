@@ -1,0 +1,188 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+import dotenv from 'dotenv';
+import debugLib from 'debug';
+import http from 'http';
+import logger from '#lib/util/logger.js';
+import { initializeApp } from '#lib/app.js';
+
+// Load environment variables
+dotenv.config();
+
+const debug = debugLib('home-test-nutech:server');
+
+// Server reference for signal handlers
+let server;
+
+/**
+ * Global error handlers for unhandled exceptions and promise rejections
+ */
+
+process.on('uncaughtException', (error, origin) => {
+  logger.error('FATAL: Uncaught Exception', {
+    error: {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    },
+    origin
+  });
+
+  // Give logger time to flush before exiting
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('FATAL: Unhandled Promise Rejection', {
+    reason: reason instanceof Error ? {
+      message: reason.message,
+      stack: reason.stack,
+      name: reason.name
+    } : reason,
+    promise
+  });
+
+  // Give logger time to flush before exiting
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM signal received: closing HTTP server');
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT signal received: closing HTTP server');
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+});
+
+/**
+ * Main async function to initialize and start the server
+ * This ensures all async operations (DB connection, etc.) complete before server starts
+ */
+async function startServer() {
+  try {
+    // Import app (which will await database connection test)
+    logger.info('Initializing application...');
+    const app = await initializeApp();
+    logger.info('Application initialized successfully');
+
+    /**
+     * Get port and host from environment and store in Express.
+     */
+    const port = normalizePort(process.env.PORT || '3000');
+    const host = process.env.HOST || 'localhost';
+    app.set('port', port);
+    app.set('host', host);
+
+    /**
+     * Create HTTP server.
+     */
+    server = http.createServer(app);
+
+    /**
+     * Listen on provided port and host.
+     */
+    server.listen(port, host);
+    server.on('error', (error) => onError(error, port));
+    server.on('listening', () => onListening(server, host));
+
+  } catch (error) {
+    logger.error('Failed to start server', {
+      error: {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      }
+    });
+    process.exit(1);
+  }
+}
+
+// Start the server
+await startServer();
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  const port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error, port) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  const bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      logger.error(`${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      logger.error(`${bind} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening(server, host) {
+  const addr = server.address();
+  const bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+
+  // Log application startup using winston
+  logger.info(`Application is running on http://${host}:${addr.port}`);
+}
